@@ -414,49 +414,91 @@ function busy(on){ $('bar').hidden = !on; $('genBtn').disabled = on || !imageFil
 /* ---------- Generation via Hugging Face (Gradio) ---------- */
 $('genBtn').addEventListener('click', generate);
 
+async function shrinkImage(file, max){
+  const bmp = await createImageBitmap(file);
+  const k = Math.min(1, max / Math.max(bmp.width, bmp.height));
+  const c = document.createElement('canvas');
+  c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+  c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+  return await new Promise(r => c.toBlob(r, 'image/png'));
+}
+
 async function generate(){
   if(!imageFile) return;
   busy(true); setStatus('Collegamento allo Space…');
   const token = $('hfToken').value.trim() || undefined;
   const space = $('spaceId').value.trim();
   try{
-    const { Client, handle_file } = await import('https://cdn.jsdelivr.net/npm/@gradio/client@1.10.0/+esm');
-    const client = await Client.connect(space, token ? { hf_token: token } : {});
+    const base = 'https://' + space.toLowerCase().replace(/[\/._]/g, '-') + '.hf.space';
+    const auth = token ? { Authorization: `Bearer ${token}` } : {};
+    const cfgRes = await fetch(base + '/config', { headers: auth });
+    if(!cfgRes.ok) throw new Error('not found');
+    const cfg = await cfgRes.json();
+    const fnIndex = cfg.dependencies.findIndex(d => d.api_name === 'shape_generation');
+    if(fnIndex < 0) throw new Error('Questo Space non offre la generazione da immagine.');
+    const triggerId = cfg.dependencies[fnIndex].targets?.[0]?.[0] ?? null;
+
+    setStatus('Carico l\'immagine…');
+    const img = await shrinkImage(imageFile, 1024);
+    const fd = new FormData(); fd.append('files', img, 'input.png');
+    const upRes = await fetch(base + '/upload', { method:'POST', body: fd, headers: auth });
+    if(!upRes.ok) throw new Error(`Caricamento immagine fallito (${upRes.status}).`);
+    const [path] = await upRes.json();
+    const file = { path, orig_name:'input.png', size: img.size, mime_type:'image/png', meta:{ _type:'gradio.FileData' } };
+
     const q = QUALITY[quality];
-    const job = client.submit('/shape_generation', {
-      image: handle_file(imageFile),
-      mv_image_front: null, mv_image_back: null, mv_image_left: null, mv_image_right: null,
-      steps: parseInt($('steps').value) || q.steps,
-      guidance_scale: parseFloat($('guidance').value) || 5,
-      seed: Math.floor(Math.random()*1e6),
-      octree_resolution: q.octree,
-      check_box_rembg: $('rembg').checked,
-      num_chunks: 8000,
-      randomize_seed: true
+    const data = [null, file, null, null, null, null,
+      parseInt($('steps').value) || q.steps,
+      parseFloat($('guidance').value) || 5,
+      Math.floor(Math.random()*1e6),
+      q.octree, $('rembg').checked, 8000, true];
+    const session_hash = Math.random().toString(36).slice(2, 13);
+    const joinRes = await fetch(base + '/queue/join', {
+      method:'POST', headers:{ 'Content-Type':'application/json', ...auth },
+      body: JSON.stringify({ data, event_data:null, fn_index:fnIndex, trigger_id:triggerId, session_hash })
     });
+    if(!joinRes.ok) throw new Error(`Lo Space ha rifiutato la richiesta (${joinRes.status}).`);
+
     const t0 = Date.now();
-    let result = null;
-    for await (const msg of job){
-      if(msg.type === 'status'){
-        if(msg.stage === 'error') throw new Error(msg.message || 'Errore durante la generazione.');
-        const sec = Math.round((Date.now()-t0)/1000);
-        if(msg.queue && msg.position != null) setStatus(`In coda: posizione ${msg.position + 1} · ${sec}s`);
-        else if(msg.stage === 'pending' || msg.stage === 'generating') setStatus(`Generazione in corso · ${sec}s`);
+    setStatus('In coda…');
+    const stream = await fetch(base + '/queue/data?session_hash=' + session_hash, { headers: auth });
+    const reader = stream.body.getReader(), dec = new TextDecoder();
+    let buf = '', result = null, failure = null;
+    outer: while(true){
+      const { value, done } = await reader.read();
+      if(done) break;
+      buf += dec.decode(value, { stream:true });
+      let i;
+      while((i = buf.indexOf('\n\n')) >= 0){
+        const chunk = buf.slice(0, i); buf = buf.slice(i + 2);
+        for(const line of chunk.split('\n')){
+          if(!line.startsWith('data:')) continue;
+          let msg; try{ msg = JSON.parse(line.slice(5)); }catch{ continue; }
+          const sec = Math.round((Date.now() - t0) / 1000);
+          if(msg.msg === 'estimation') setStatus(msg.rank > 0 ? `In coda: posizione ${msg.rank + 1} · ${sec}s` : `Avvio della GPU · ${sec}s`);
+          else if(msg.msg === 'process_starts' || msg.msg === 'progress') setStatus(`Generazione in corso · ${sec}s (di solito 20-60s)`);
+          else if(msg.msg === 'process_completed'){
+            if(msg.success) result = msg.output.data;
+            else failure = msg.output?.error || msg.output?.title || 'Errore durante la generazione.';
+            break outer;
+          }
+        }
       }
-      if(msg.type === 'data'){ result = msg.data; break; }
     }
+    reader.cancel().catch(() => {});
+    if(failure) throw new Error(String(failure));
     if(!result) throw new Error('Lo Space non ha restituito un modello.');
     const f = result[0]?.url ? result[0] : result[0]?.value;
     if(!f?.url) throw new Error('Risposta inattesa dallo Space: nessun file .glb.');
     setStatus('Scarico il modello…');
-    const res = await fetch(f.url, token ? { headers:{ Authorization:`Bearer ${token}` } } : {});
+    const res = await fetch(f.url, { headers: auth });
     if(!res.ok) throw new Error(`Download del modello fallito (${res.status}).`);
     await loadModelBuffer(await res.arrayBuffer(), baseName + '.glb');
     setStatus(`Fatto in ${Math.round((Date.now()-t0)/1000)} secondi.`);
   }catch(err){
     const m = String(err?.message || err);
-    if(/quota|ZeroGPU|exceeded/i.test(m)) setStatus('Quota GPU gratuita esaurita. Inserisci un token Hugging Face nelle impostazioni avanzate o riprova più tardi.', true);
-    else if(/metadata|not found|404|Could not resolve|Failed to fetch/i.test(m)) setStatus(`Non riesco a raggiungere lo Space “${space}”. Lo Space potrebbe essere in pausa o in riavvio: riprova tra qualche minuto, oppure in Impostazioni avanzate prova “tencent/Hunyuan3D-2”.`, true);
+    if(/quota|ZeroGPU|exceeded|GPU task/i.test(m)) setStatus('Quota GPU gratuita esaurita. Inserisci un token Hugging Face nelle impostazioni avanzate o riprova più tardi.', true);
+    else if(/^not found$|Failed to fetch|NetworkError|Load failed/i.test(m)) setStatus(`Non riesco a raggiungere lo Space “${space}”. Lo Space potrebbe essere in pausa o in riavvio: riprova tra qualche minuto, oppure in Impostazioni avanzate prova “tencent/Hunyuan3D-2”.`, true);
     else setStatus(m, true);
   }finally{ busy(false); }
 }
