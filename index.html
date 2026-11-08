@@ -1,0 +1,490 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Drippo Lab</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Drippo Lab">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: banco di lavoro a due colonne — pannello passi a sinistra, piatto di stampa a destra; una colonna su telefono */
+:root{
+  --bg:#eef0f3; --panel:#ffffff; --ink:#1b1e27; --muted:#5d6475; --line:#d9dce4;
+  --resin:#6c4cf0; --resin-ink:#ffffff; --resin-soft:#ebe6ff;
+  --ok:#1f8a5b; --ok-soft:#dff3ea; --warn:#b4570b; --warn-soft:#fcebd9;
+  --plate:#e3e6ec; --model:#8c74ff;
+  --f-display:"Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
+  --f-body:"Instrument Sans", "Helvetica Neue", system-ui, sans-serif;
+  --f-mono:"JetBrains Mono", ui-monospace, Menlo, monospace;
+  --r:14px;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#12141a; --panel:#1b1e27; --ink:#eceef4; --muted:#9aa1b2; --line:#2c303c;
+  --resin:#9c86ff; --resin-ink:#140f2b; --resin-soft:#2a2448;
+  --ok:#5fd19c; --ok-soft:#163327; --warn:#f2a660; --warn-soft:#3a2614;
+  --plate:#232733; --model:#a996ff; color-scheme:dark;
+}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 var(--f-body);
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));}
+.wrap{max-width:1200px;margin:0 auto;padding-block:20px 40px;display:grid;gap:20px}
+header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+h1{font:700 clamp(28px,5vw,40px)/1 var(--f-display);margin:0;letter-spacing:-.02em}
+h1 span{color:var(--resin)}
+.tag{font:500 12px var(--f-mono);color:var(--muted);letter-spacing:.04em;text-transform:uppercase}
+.grid{display:grid;grid-template-columns:minmax(0,380px) minmax(0,1fr);gap:20px;align-items:start}
+@media (max-width:860px){.grid{grid-template-columns:minmax(0,1fr)}.viewer-col{order:-1}}
+.col{display:grid;gap:16px;min-width:0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:18px;display:grid;gap:14px;min-width:0}
+.card h2{font:600 18px/1.2 var(--f-display);margin:0;display:flex;gap:10px;align-items:center}
+.step{font:500 11px var(--f-mono);color:var(--resin);background:var(--resin-soft);border-radius:6px;padding:3px 7px}
+.hint{color:var(--muted);font-size:13px;margin:0}
+.drop{border:1.5px dashed var(--line);border-radius:12px;display:grid;place-items:center;text-align:center;
+  min-height:150px;padding:14px;cursor:pointer;position:relative;overflow:hidden;color:var(--muted)}
+.drop:hover,.drop.over{border-color:var(--resin);color:var(--ink)}
+.drop img{max-height:200px;border-radius:8px;object-fit:contain}
+.drop input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.seg{display:grid;grid-template-columns:repeat(3,1fr);background:var(--bg);border-radius:10px;padding:3px;gap:3px}
+.seg button{border:0;background:transparent;color:var(--muted);font:500 13px var(--f-body);padding:8px 4px;border-radius:8px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--panel);color:var(--ink);box-shadow:0 1px 2px rgb(0 0 0/.12)}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+label.chk{display:flex;gap:8px;align-items:center;font-size:14px;cursor:pointer}
+.btn{border:0;border-radius:11px;padding:12px 16px;font:600 15px var(--f-body);cursor:pointer;background:var(--resin);color:var(--resin-ink);width:100%}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.btn.small{width:auto;padding:7px 11px;font-size:13px}
+button:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid var(--resin);outline-offset:2px}
+.status{font:400 13px var(--f-mono);color:var(--muted);min-height:1.5em;overflow-wrap:anywhere}
+.status.err{color:var(--warn)}
+.bar{height:4px;background:var(--bg);border-radius:4px;overflow:hidden}
+.bar i{display:block;height:100%;width:30%;background:var(--resin);border-radius:4px;animation:slide 1.3s ease-in-out infinite}
+@keyframes slide{0%{transform:translateX(-100%)}100%{transform:translateX(340%)}}
+@media (prefers-reduced-motion:reduce){.bar i{animation:none;width:100%;opacity:.5}}
+details summary{cursor:pointer;font-size:13px;color:var(--muted)}
+details[open] summary{margin-bottom:10px}
+.field{display:grid;gap:4px;font-size:13px;color:var(--muted)}
+.field input{font:400 14px var(--f-mono);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%}
+.fields{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.or{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.06em}
+.or::before,.or::after{content:"";flex:1;height:1px;background:var(--line)}
+.filebtn{position:relative;overflow:hidden}
+.filebtn input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.viewer{position:relative;background:var(--plate);border-radius:var(--r);border:1px solid var(--line);aspect-ratio:4/3;max-width:100%;overflow:hidden}
+.viewer canvas{display:block;width:100%;height:100%;touch-action:none}
+.vtools{position:absolute;top:10px;right:10px;display:flex;gap:6px}
+.vtools .btn{background:var(--panel)}
+.badge{position:absolute;top:12px;left:12px;font:500 11px var(--f-mono);text-transform:uppercase;letter-spacing:.06em;
+  background:var(--panel);color:var(--muted);border-radius:6px;padding:4px 8px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1px;background:var(--line);border-radius:12px;overflow:hidden;border:1px solid var(--line)}
+.stat{background:var(--panel);padding:12px 14px;display:grid;gap:2px}
+.stat b{font:500 18px var(--f-mono);font-variant-numeric:tabular-nums}
+.stat span{font-size:12px;color:var(--muted)}
+.pill{display:inline-flex;gap:6px;align-items:center;font:500 13px var(--f-body);padding:5px 10px;border-radius:999px}
+.pill.ok{background:var(--ok-soft);color:var(--ok)}
+.pill.warn{background:var(--warn-soft);color:var(--warn)}
+.pill::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.export{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width:420px){.export,.fields{grid-template-columns:1fr}}
+.foot{font-size:12px;color:var(--muted)}
+.foot a{color:var(--resin)}
+</style>
+<script type="importmap">
+{"imports":{
+  "three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+}}
+</script>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Drippo <span>Lab</span></h1>
+    <div class="tag">Foto → modello 3D → STL per resina</div>
+  </header>
+
+  <div class="grid">
+    <div class="col">
+      <section class="card" aria-labelledby="h-gen">
+        <h2 id="h-gen"><span class="step">1</span>Dall'immagine</h2>
+        <div class="drop" id="drop">
+          <div id="dropText">Tocca per scegliere una foto<br><small>soggetto singolo, sfondo semplice, ben illuminato</small></div>
+          <img id="preview" alt="Immagine scelta" hidden>
+          <input type="file" id="imgInput" accept="image/*" aria-label="Scegli immagine">
+        </div>
+
+        <div class="field" id="qLabel">Dettaglio
+          <div class="seg" role="group" aria-labelledby="qLabel" id="quality">
+            <button type="button" data-q="draft" aria-pressed="false">Bozza</button>
+            <button type="button" data-q="std" aria-pressed="true">Standard</button>
+            <button type="button" data-q="high" aria-pressed="false">Alto</button>
+          </div>
+        </div>
+
+        <label class="chk"><input type="checkbox" id="rembg" checked> Rimuovi lo sfondo automaticamente</label>
+
+        <details>
+          <summary>Impostazioni avanzate</summary>
+          <div style="display:grid;gap:10px">
+            <label class="field">Space Hugging Face
+              <input id="spaceId" value="tencent/Hunyuan3D-2.1" autocomplete="off" spellcheck="false">
+            </label>
+            <label class="field">Token Hugging Face (facoltativo, aumenta la quota GPU gratuita)
+              <input id="hfToken" type="password" placeholder="hf_…" autocomplete="off">
+            </label>
+            <div class="fields">
+              <label class="field">Passi<input id="steps" type="number" min="5" max="100" value="50"></label>
+              <label class="field">Guidance<input id="guidance" type="number" min="1" max="15" step="0.5" value="5"></label>
+            </div>
+          </div>
+        </details>
+
+        <button class="btn" id="genBtn" disabled>Genera modello 3D</button>
+        <div class="bar" id="bar" hidden><i></i></div>
+        <div class="status" id="status" role="status"></div>
+
+        <div class="or">oppure</div>
+        <div class="btn ghost filebtn">Apri un modello (.glb .obj .stl)
+          <input type="file" id="modelInput" accept=".glb,.gltf,.obj,.stl" aria-label="Apri modello 3D">
+        </div>
+      </section>
+    </div>
+
+    <div class="col viewer-col">
+      <div class="viewer" id="viewer">
+        <span class="badge" id="badge">Esempio</span>
+        <div class="vtools">
+          <button class="btn small ghost" id="wireBtn" aria-pressed="false">Maglia</button>
+          <button class="btn small ghost" id="fitBtn">Centra</button>
+        </div>
+      </div>
+
+      <section class="card" aria-labelledby="h-print">
+        <h2 id="h-print"><span class="step">2</span>Prepara la stampa</h2>
+        <div class="fields">
+          <label class="field">Altezza finale (mm)<input id="height" type="number" min="5" max="400" value="60"></label>
+          <label class="field">Resina (€ al kg)<input id="price" type="number" min="1" step="1" value="35"></label>
+        </div>
+        <div id="meshState"></div>
+        <div class="stats">
+          <div class="stat"><b id="sDims">–</b><span>L × P × A mm</span></div>
+          <div class="stat"><b id="sTris">–</b><span>triangoli</span></div>
+          <div class="stat"><b id="sVol">–</b><span>resina se pieno</span></div>
+          <div class="stat"><b id="sCost">–</b><span>peso e costo stimati</span></div>
+        </div>
+        <p class="hint">Volume calcolato sul pezzo pieno. In Chitubox o Lychee svuotalo con pareti da 2 mm e aggiungi fori di drenaggio: la resina usata scende molto.</p>
+      </section>
+
+      <section class="card" aria-labelledby="h-exp">
+        <h2 id="h-exp"><span class="step">3</span>Esporta</h2>
+        <div class="export">
+          <button class="btn" id="dlBtn">Scarica STL</button>
+          <button class="btn ghost" id="shareBtn">Salva in File / Condividi</button>
+        </div>
+        <p class="hint">STL binario in millimetri, asse Z verso l'alto, base appoggiata al piatto: si apre direttamente nello slicer.</p>
+      </section>
+    </div>
+  </div>
+
+  <p class="foot">Generazione con Hunyuan3D 2.1 (Tencent, open source) tramite Hugging Face. Senza token la quota GPU gratuita è di pochi minuti al giorno; un token gratuito la aumenta. Se lo Space è occupato, genera su <a href="https://huggingface.co/spaces/tencent/Hunyuan3D-2.1" target="_blank" rel="noopener">Hunyuan3D</a> o <a href="https://www.tripo3d.ai" target="_blank" rel="noopener">Tripo</a> e apri qui il file con “Apri un modello”.</p>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+import { STLExporter } from 'three/addons/exporters/STLExporter.js';
+import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+
+const $ = id => document.getElementById(id);
+const store = {
+  get(k){ try{ return localStorage.getItem(k); }catch{ return null; } },
+  set(k,v){ try{ localStorage.setItem(k,v); }catch{} }
+};
+
+/* ---------- Viewer ---------- */
+const viewerEl = $('viewer');
+const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+viewerEl.prepend(renderer.domElement);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(35, 4/3, 0.1, 5000);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+scene.add(new THREE.HemisphereLight(0xffffff, 0x8888aa, 1.1));
+const key = new THREE.DirectionalLight(0xffffff, 1.6); key.position.set(1,2,1.5); scene.add(key);
+const rim = new THREE.DirectionalLight(0xffffff, 0.6); rim.position.set(-1.5,1,-1); scene.add(rim);
+
+const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const material = new THREE.MeshStandardMaterial({ color: cssVar('--model') || '#8c74ff', roughness:0.32, metalness:0.05 });
+let mesh = null, grid = null;
+
+function resize(){
+  const w = viewerEl.clientWidth, h = viewerEl.clientHeight;
+  renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(viewerEl);
+(function loop(){ controls.update(); renderer.render(scene, camera); requestAnimationFrame(loop); })();
+matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => material.color.set(cssVar('--model')));
+
+/* ---------- Model state ---------- */
+let geom = null;      // indexed geometry, Y up, base at y=0, centered in XZ, units as loaded
+let rawHeight = 1;    // height in loaded units
+let analysis = null;  // computed once per model
+
+function geometryFromObject(obj){
+  obj.updateMatrixWorld(true);
+  const chunks = []; let total = 0;
+  const v = new THREE.Vector3();
+  obj.traverse(o => {
+    if(!o.isMesh || !o.geometry) return;
+    const g = o.geometry, pos = g.getAttribute('position');
+    if(!pos) return;
+    const idx = g.index ? g.index.array : null;
+    const n = idx ? idx.length : pos.count;
+    const out = new Float32Array(n * 3);
+    for(let i=0;i<n;i++){
+      const k = idx ? idx[i] : i;
+      v.fromBufferAttribute(pos, k).applyMatrix4(o.matrixWorld);
+      out[i*3]=v.x; out[i*3+1]=v.y; out[i*3+2]=v.z;
+    }
+    chunks.push(out); total += out.length;
+  });
+  if(!total) throw new Error('Il file non contiene superfici 3D.');
+  const all = new Float32Array(total); let off = 0;
+  for(const c of chunks){ all.set(c, off); off += c.length; }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(all, 3));
+  return g;
+}
+
+function setModel(g, label){
+  g.computeBoundingBox();
+  const b = g.boundingBox, size = new THREE.Vector3(); b.getSize(size);
+  const tol = Math.max(size.x, size.y, size.z) * 1e-6;
+  g.deleteAttribute('normal'); g.deleteAttribute('uv');
+  let m = mergeVertices(g, tol);
+  m.computeBoundingBox();
+  const c = new THREE.Vector3(); m.boundingBox.getCenter(c);
+  m.translate(-c.x, -m.boundingBox.min.y, -c.z);
+  m.computeBoundingBox(); m.computeVertexNormals();
+  geom = m; rawHeight = Math.max(m.boundingBox.max.y, 1e-9);
+  analysis = analyze(m);
+  if(mesh){ scene.remove(mesh); mesh.geometry.dispose(); }
+  mesh = new THREE.Mesh(geom, material); scene.add(mesh);
+  $('badge').textContent = label; $('badge').hidden = !label;
+  applyScale(); fit();
+}
+
+function analyze(g){
+  const idx = g.index.array, p = g.attributes.position.array, N = g.attributes.position.count;
+  let vol = 0, tris = 0; const edges = new Map();
+  const add = (a,b) => { const k = a<b ? a*N+b : b*N+a; edges.set(k, (edges.get(k)||0)+1); };
+  for(let i=0;i<idx.length;i+=3){
+    const a=idx[i], b=idx[i+1], c=idx[i+2];
+    if(a===b||b===c||a===c) continue;
+    tris++;
+    const ax=p[a*3],ay=p[a*3+1],az=p[a*3+2],bx=p[b*3],by=p[b*3+1],bz=p[b*3+2],cx=p[c*3],cy=p[c*3+1],cz=p[c*3+2];
+    vol += (ax*(by*cz-bz*cy) - ay*(bx*cz-bz*cx) + az*(bx*cy-by*cx)) / 6;
+    add(a,b); add(b,c); add(c,a);
+  }
+  let open = 0, nonManifold = 0;
+  for(const n of edges.values()){ if(n===1) open++; else if(n>2) nonManifold++; }
+  return { vol: Math.abs(vol), tris, open, nonManifold };
+}
+
+const fmt = (n, d=0) => n.toLocaleString('it-IT', { minimumFractionDigits:d, maximumFractionDigits:d });
+
+function scaleFactor(){ const h = parseFloat($('height').value) || 60; return h / rawHeight; }
+
+function applyScale(){
+  if(!geom) return;
+  const s = scaleFactor(); mesh.scale.setScalar(s);
+  const sz = new THREE.Vector3(); geom.boundingBox.getSize(sz); sz.multiplyScalar(s);
+  $('sDims').textContent = `${fmt(sz.x,1)} × ${fmt(sz.z,1)} × ${fmt(sz.y,1)}`;
+  $('sTris').textContent = fmt(analysis.tris);
+  const ml = analysis.vol * s**3 / 1000;
+  const grams = ml * 1.1, price = parseFloat($('price').value) || 0;
+  $('sVol').textContent = `${fmt(ml, ml<10?1:0)} ml`;
+  $('sCost').textContent = `${fmt(grams,0)} g · € ${fmt(grams/1000*price,2)}`;
+  const ok = analysis.open===0 && analysis.nonManifold===0;
+  $('meshState').innerHTML = ok
+    ? '<span class="pill ok">Mesh chiusa: pronta per lo slicer</span>'
+    : `<span class="pill warn">${fmt(analysis.open)} bordi aperti · ${fmt(analysis.nonManifold)} spigoli non-manifold</span>
+       <p class="hint" style="margin-top:8px">Usa la riparazione automatica di Chitubox o Lychee prima di stampare, oppure rigenera con dettaglio Standard.</p>`;
+  updateGrid(sz);
+}
+
+function updateGrid(sz){
+  if(grid){ scene.remove(grid); grid.geometry.dispose(); }
+  const span = Math.max(sz.x, sz.z) * 1.8;
+  const step = span > 150 ? 20 : span > 60 ? 10 : 5;
+  const n = Math.ceil(span/step)*step;
+  const c1 = new THREE.Color(cssVar('--muted')), c2 = new THREE.Color(cssVar('--line'));
+  grid = new THREE.GridHelper(n, n/step, c1, c2); scene.add(grid);
+}
+
+function fit(){
+  if(!geom) return;
+  const s = scaleFactor(), sz = new THREE.Vector3(); geom.boundingBox.getSize(sz); sz.multiplyScalar(s);
+  const r = Math.max(sz.x, sz.y, sz.z);
+  controls.target.set(0, sz.y/2, 0);
+  camera.position.set(r*1.3, sz.y*0.9 + r*0.5, r*1.6);
+  camera.near = r/100; camera.far = r*50; camera.updateProjectionMatrix();
+}
+
+$('height').addEventListener('input', () => { applyScale(); fit(); });
+$('price').addEventListener('input', applyScale);
+$('fitBtn').addEventListener('click', fit);
+$('wireBtn').addEventListener('click', e => {
+  material.wireframe = !material.wireframe; e.currentTarget.setAttribute('aria-pressed', material.wireframe);
+});
+
+/* ---------- Sample: a resin drop ---------- */
+(function sample(){
+  const pts = [];
+  for(let i=0;i<=48;i++){
+    const t = i/48*Math.PI, y = -Math.cos(t);
+    const r = Math.sin(t) * Math.pow((1 - y) / 2, 0.75) * 1.25;
+    pts.push(new THREE.Vector2(Math.max(r,0), y + 1));
+  }
+  setModel(new THREE.LatheGeometry(pts, 64), 'Esempio');
+})();
+
+/* ---------- Load existing model ---------- */
+$('modelInput').addEventListener('change', async e => {
+  const f = e.target.files[0]; if(!f) return;
+  try{ await loadModelBuffer(await f.arrayBuffer(), f.name); setStatus(`Aperto: ${f.name}`); }
+  catch(err){ setStatus(err.message, true); }
+  e.target.value = '';
+});
+
+async function loadModelBuffer(buf, name){
+  const ext = name.split('.').pop().toLowerCase();
+  let g;
+  if(ext === 'stl'){ g = new STLLoader().parse(buf); }
+  else if(ext === 'obj'){ g = geometryFromObject(new OBJLoader().parse(new TextDecoder().decode(buf))); }
+  else {
+    const gltf = await new Promise((res, rej) => new GLTFLoader().parse(buf, '', res, rej));
+    g = geometryFromObject(gltf.scene);
+  }
+  baseName = name.replace(/\.[^.]+$/, '');
+  setModel(g, '');
+}
+
+/* ---------- Image input ---------- */
+let imageFile = null, baseName = 'drippo-modello';
+function pickImage(f){
+  if(!f || !f.type.startsWith('image/')) return;
+  imageFile = f;
+  const url = URL.createObjectURL(f);
+  $('preview').src = url; $('preview').hidden = false; $('dropText').hidden = true;
+  $('genBtn').disabled = false;
+  baseName = f.name.replace(/\.[^.]+$/, '') || baseName;
+}
+$('imgInput').addEventListener('change', e => pickImage(e.target.files[0]));
+const drop = $('drop');
+['dragenter','dragover'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave','drop'].forEach(t => drop.addEventListener(t, () => drop.classList.remove('over')));
+drop.addEventListener('drop', e => { e.preventDefault(); pickImage(e.dataTransfer.files[0]); });
+
+const QUALITY = { draft:{ octree:256, steps:30 }, std:{ octree:384, steps:50 }, high:{ octree:512, steps:50 } };
+let quality = 'std';
+document.querySelectorAll('#quality button').forEach(b => b.addEventListener('click', () => {
+  quality = b.dataset.q;
+  document.querySelectorAll('#quality button').forEach(x => x.setAttribute('aria-pressed', x===b));
+  $('steps').value = QUALITY[quality].steps;
+}));
+
+$('hfToken').value = store.get('hfToken') || '';
+$('spaceId').value = store.get('spaceId') || $('spaceId').value;
+$('hfToken').addEventListener('change', e => store.set('hfToken', e.target.value.trim()));
+$('spaceId').addEventListener('change', e => store.set('spaceId', e.target.value.trim()));
+
+function setStatus(msg, err=false){ $('status').textContent = msg; $('status').classList.toggle('err', err); }
+function busy(on){ $('bar').hidden = !on; $('genBtn').disabled = on || !imageFile; }
+
+/* ---------- Generation via Hugging Face (Gradio) ---------- */
+$('genBtn').addEventListener('click', generate);
+
+async function generate(){
+  if(!imageFile) return;
+  busy(true); setStatus('Collegamento allo Space…');
+  const token = $('hfToken').value.trim() || undefined;
+  const space = $('spaceId').value.trim();
+  try{
+    const { Client, handle_file } = await import('https://cdn.jsdelivr.net/npm/@gradio/client@1.10.0/+esm');
+    const client = await Client.connect(space, token ? { hf_token: token } : {});
+    const q = QUALITY[quality];
+    const job = client.submit('/shape_generation', {
+      image: handle_file(imageFile),
+      mv_image_front: null, mv_image_back: null, mv_image_left: null, mv_image_right: null,
+      steps: parseInt($('steps').value) || q.steps,
+      guidance_scale: parseFloat($('guidance').value) || 5,
+      seed: Math.floor(Math.random()*1e6),
+      octree_resolution: q.octree,
+      check_box_rembg: $('rembg').checked,
+      num_chunks: 8000,
+      randomize_seed: true
+    });
+    const t0 = Date.now();
+    let result = null;
+    for await (const msg of job){
+      if(msg.type === 'status'){
+        if(msg.stage === 'error') throw new Error(msg.message || 'Errore durante la generazione.');
+        const sec = Math.round((Date.now()-t0)/1000);
+        if(msg.queue && msg.position != null) setStatus(`In coda: posizione ${msg.position + 1} · ${sec}s`);
+        else if(msg.stage === 'pending' || msg.stage === 'generating') setStatus(`Generazione in corso · ${sec}s`);
+      }
+      if(msg.type === 'data'){ result = msg.data; break; }
+    }
+    if(!result) throw new Error('Lo Space non ha restituito un modello.');
+    const f = result[0]?.url ? result[0] : result[0]?.value;
+    if(!f?.url) throw new Error('Risposta inattesa dallo Space: nessun file .glb.');
+    setStatus('Scarico il modello…');
+    const res = await fetch(f.url, token ? { headers:{ Authorization:`Bearer ${token}` } } : {});
+    if(!res.ok) throw new Error(`Download del modello fallito (${res.status}).`);
+    await loadModelBuffer(await res.arrayBuffer(), baseName + '.glb');
+    setStatus(`Fatto in ${Math.round((Date.now()-t0)/1000)} secondi.`);
+  }catch(err){
+    const m = String(err?.message || err);
+    if(/quota|ZeroGPU|exceeded/i.test(m)) setStatus('Quota GPU gratuita esaurita. Inserisci un token Hugging Face nelle impostazioni avanzate o riprova più tardi.', true);
+    else if(/metadata|not found|404|Could not resolve|Failed to fetch/i.test(m)) setStatus(`Non riesco a raggiungere lo Space “${space}”. Lo Space potrebbe essere in pausa o in riavvio: riprova tra qualche minuto, oppure in Impostazioni avanzate prova “tencent/Hunyuan3D-2”.`, true);
+    else setStatus(m, true);
+  }finally{ busy(false); }
+}
+
+/* ---------- Export STL (mm, Z up) ---------- */
+function buildSTL(){
+  const g = geom.clone();
+  g.scale(scaleFactor(), scaleFactor(), scaleFactor());
+  g.rotateX(Math.PI / 2);           // Y-up → Z-up per gli slicer
+  g.computeBoundingBox();
+  g.translate(0, 0, -g.boundingBox.min.z);
+  const out = new STLExporter().parse(new THREE.Mesh(g), { binary:true });
+  return new Blob([out], { type:'model/stl' });
+}
+const fileName = () => `${baseName}-${Math.round(parseFloat($('height').value)||60)}mm.stl`;
+
+$('dlBtn').addEventListener('click', () => {
+  const url = URL.createObjectURL(buildSTL());
+  const a = document.createElement('a'); a.href = url; a.download = fileName();
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+});
+$('shareBtn').addEventListener('click', async () => {
+  const file = new File([buildSTL()], fileName(), { type:'model/stl' });
+  if(navigator.canShare?.({ files:[file] })){
+    try{ await navigator.share({ files:[file], title:file.name }); }catch{}
+  }else $('dlBtn').click();
+});
+</script>
+</body>
+</html>
